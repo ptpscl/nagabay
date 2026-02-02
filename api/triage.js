@@ -1,54 +1,7 @@
-import { GoogleGenAI } from '@google/genai';
+import { generateObject } from 'ai';
+import { google } from '@ai-sdk/google';
 
-/**
- * Vercel Serverless Function for Triage Analysis
- * This replaces the Express server for production deployment on Vercel
- */
-
-let geminiClient = null;
-
-function validateApiKey() {
-  if (!process.env.GEMINI_API_KEY) {
-    throw new Error('GEMINI_API_KEY is not configured');
-  }
-  if (process.env.GEMINI_API_KEY.trim().length === 0) {
-    throw new Error('GEMINI_API_KEY is empty');
-  }
-}
-
-function initializeClient() {
-  if (!geminiClient) {
-    validateApiKey();
-    geminiClient = new GoogleGenAI({
-      apiKey: process.env.GEMINI_API_KEY
-    });
-  }
-  return geminiClient;
-}
-
-function categorizeError(error) {
-  const errorMessage = (error.message || '').toLowerCase();
-  const errorStatus = error.status || 500;
-
-  if (errorMessage.includes('api key') || errorMessage.includes('authentication')) {
-    return { errorType: 'MISSING_API_KEY', statusCode: 503, message: 'AI service not configured. Contact support.' };
-  }
-  if (errorMessage.includes('quota') || errorMessage.includes('rate_limit')) {
-    return { errorType: 'QUOTA_EXCEEDED', statusCode: 429, message: 'Service overloaded. Try again in moments.' };
-  }
-  if (errorMessage.includes('model') || errorMessage.includes('not found')) {
-    return { errorType: 'MODEL_ERROR', statusCode: 503, message: 'AI service error. Try again.' };
-  }
-  if (errorStatus === 400) {
-    return { errorType: 'INVALID_REQUEST', statusCode: 400, message: 'Input error. Check and retry.' };
-  }
-  if (errorStatus === 429) {
-    return { errorType: 'RATE_LIMITED', statusCode: 429, message: 'Too many requests. Wait and retry.' };
-  }
-
-  return { errorType: 'MODEL_ERROR', statusCode: 503, message: 'AI service error. Try again.' };
-}
-
+// System instruction for the triage AI
 const SYSTEM_INSTRUCTION = `
 You are the "Naga City Smart Health Navigator." Your primary mission is to implement the "BHS-First" policy to ensure Barangay Health Stations are the first line of health care for Nagueños.
 
@@ -86,113 +39,117 @@ If the patient's barangay does not have a specific BHS in the list above, route 
 You must return a valid JSON object.
 `;
 
+// Define the schema for the triage response
+const triageSchema = {
+  type: 'object',
+  properties: {
+    triageLevel: {
+      type: 'string',
+      enum: ['LEVEL_1_EMERGENCY', 'LEVEL_2_TARGETED_CARE', 'LEVEL_3_ROUTINE']
+    },
+    recommendedFacility: {
+      type: 'string',
+      description: 'The facility ID to route the patient to'
+    },
+    facilityName: {
+      type: 'string'
+    },
+    reasoning: {
+      type: 'string',
+      description: 'Explanation for the triage decision'
+    },
+    actionPlan: {
+      type: 'string',
+      description: 'Recommended next steps for the patient'
+    },
+    warnings: {
+      type: 'array',
+      items: { type: 'string' },
+      description: 'Any important warnings or notes'
+    }
+  },
+  required: ['triageLevel', 'recommendedFacility', 'facilityName', 'reasoning', 'actionPlan']
+};
+
 export default async function handler(req, res) {
-  // Enable CORS
+  // CORS headers
   res.setHeader('Access-Control-Allow-Credentials', 'true');
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
-  res.setHeader('Access-Control-Allow-Headers', 'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version');
+  res.setHeader(
+    'Access-Control-Allow-Headers',
+    'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version'
+  );
 
-  // Handle preflight requests
+  // Handle preflight
   if (req.method === 'OPTIONS') {
     res.status(200).end();
     return;
   }
 
-  // Only allow POST
+  // Only POST allowed
   if (req.method !== 'POST') {
     return res.status(405).json({
       success: false,
       error: 'Method not allowed',
-      errorType: 'METHOD_NOT_ALLOWED',
-      timestamp: new Date().toISOString()
+      errorType: 'METHOD_NOT_ALLOWED'
     });
   }
 
   try {
-    // Validate API key before proceeding
-    validateApiKey();
-
-    // Parse body - handle both string and object
+    // Parse request body
     let bodyData = req.body;
     if (typeof bodyData === 'string') {
-      try {
-        bodyData = JSON.parse(bodyData);
-      } catch (e) {
-        return res.status(400).json({
-          success: false,
-          error: 'Invalid JSON in request body',
-          errorType: 'INVALID_REQUEST',
-          timestamp: new Date().toISOString()
-        });
-      }
+      bodyData = JSON.parse(bodyData);
     }
 
-    // Validate request body
     if (!bodyData || Object.keys(bodyData).length === 0) {
       return res.status(400).json({
         success: false,
         error: 'Request body is required',
-        errorType: 'INVALID_REQUEST',
-        timestamp: new Date().toISOString()
+        errorType: 'INVALID_REQUEST'
       });
     }
 
-    // Initialize Gemini client
-    const client = initializeClient();
+    // Use Vercel AI Gateway with Google models
+    // The API key is automatically provided by Vercel AI Gateway
+    const model = google('gemini-2.0-flash');
 
-    // Convert request body to JSON string for Gemini
-    const userInput = JSON.stringify(bodyData);
-
-    // Call Gemini API with proper model name
-    const response = await client.models.generateContent({
-      model: 'gemini-2.0-flash',
-      contents: userInput,
-      config: {
-        systemInstruction: SYSTEM_INSTRUCTION,
-        responseMimeType: 'application/json'
-      }
+    // Call the AI model
+    const result = await generateObject({
+      model: model,
+      system: SYSTEM_INSTRUCTION,
+      prompt: JSON.stringify(bodyData),
+      schema: triageSchema
     });
 
-    // Extract text from response
-    const responseText = response.response.text();
-    let triageResult;
-
-    try {
-      triageResult = JSON.parse(responseText);
-    } catch (parseError) {
-      console.error('[TRIAGE API] Parse error:', parseError.message, 'Response text:', responseText);
-      return res.status(500).json({
-        success: false,
-        error: 'Invalid response format from AI service',
-        errorType: 'PARSE_ERROR',
-        timestamp: new Date().toISOString()
-      });
-    }
-
-    // Return success response
+    // Return success
     return res.status(200).json({
       success: true,
-      data: triageResult,
-      timestamp: new Date().toISOString()
+      data: result.object
     });
-
   } catch (error) {
-    console.error('[TRIAGE API] Error caught:', {
-      message: error.message,
-      status: error.status,
-      name: error.name,
-      stack: error.stack
-    });
+    console.error('[TRIAGE API] Error:', error.message);
 
-    const { errorType, statusCode, message } = categorizeError(error);
+    // Determine error type
+    let errorType = 'MODEL_ERROR';
+    let message = 'AI service error. Try again.';
+    let statusCode = 503;
+
+    if (error.message.includes('API key') || error.message.includes('authentication')) {
+      errorType = 'MISSING_API_KEY';
+      message = 'AI service not configured. Contact support.';
+      statusCode = 503;
+    } else if (error.message.includes('quota') || error.message.includes('rate')) {
+      errorType = 'QUOTA_EXCEEDED';
+      message = 'Service overloaded. Try again in moments.';
+      statusCode = 429;
+    }
 
     return res.status(statusCode).json({
       success: false,
       error: message,
-      errorType: errorType,
-      details: process.env.NODE_ENV === 'development' ? error.message : undefined,
-      timestamp: new Date().toISOString()
+      errorType: errorType
     });
   }
 }

@@ -110,8 +110,26 @@ export default async function handler(req, res) {
   }
 
   try {
+    // Validate API key before proceeding
+    validateApiKey();
+
+    // Parse body - handle both string and object
+    let bodyData = req.body;
+    if (typeof bodyData === 'string') {
+      try {
+        bodyData = JSON.parse(bodyData);
+      } catch (e) {
+        return res.status(400).json({
+          success: false,
+          error: 'Invalid JSON in request body',
+          errorType: 'INVALID_REQUEST',
+          timestamp: new Date().toISOString()
+        });
+      }
+    }
+
     // Validate request body
-    if (!req.body || Object.keys(req.body).length === 0) {
+    if (!bodyData || Object.keys(bodyData).length === 0) {
       return res.status(400).json({
         success: false,
         error: 'Request body is required',
@@ -124,9 +142,9 @@ export default async function handler(req, res) {
     const client = initializeClient();
 
     // Convert request body to JSON string for Gemini
-    const userInput = JSON.stringify(req.body);
+    const userInput = JSON.stringify(bodyData);
 
-    // Call Gemini API
+    // Call Gemini API with proper model name
     const response = await client.models.generateContent({
       model: 'gemini-2.0-flash',
       contents: userInput,
@@ -143,6 +161,7 @@ export default async function handler(req, res) {
     try {
       triageResult = JSON.parse(responseText);
     } catch (parseError) {
+      console.error('[TRIAGE API] Parse error:', parseError.message, 'Response text:', responseText);
       return res.status(500).json({
         success: false,
         error: 'Invalid response format from AI service',
@@ -159,7 +178,12 @@ export default async function handler(req, res) {
     });
 
   } catch (error) {
-    console.error('[TRIAGE API] Error:', error.message);
+    console.error('[TRIAGE API] Error caught:', {
+      message: error.message,
+      status: error.status,
+      name: error.name,
+      stack: error.stack
+    });
 
     const { errorType, statusCode, message } = categorizeError(error);
 
@@ -167,6 +191,7 @@ export default async function handler(req, res) {
       success: false,
       error: message,
       errorType: errorType,
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined,
       timestamp: new Date().toISOString()
     });
   }

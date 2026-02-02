@@ -125,19 +125,46 @@ export function getUserFriendlyErrorMessage(errorType?: string): string {
 
 /**
  * Validates the backend connection (for health checks)
- * @returns Promise<boolean> indicating if backend is healthy
+ * @returns Promise with health status information
  */
-export async function validateBackendConnection(): Promise<boolean> {
-  const BACKEND_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001';
-  const healthEndpoint = `${BACKEND_URL}/api/health`;
+export async function validateBackendConnection(): Promise<{
+  isHealthy: boolean;
+  status: any;
+  error?: string;
+}> {
+  let healthEndpoint: string;
+
+  if (typeof window !== 'undefined' && process.env.NODE_ENV === 'production') {
+    // Production: use relative /api path
+    healthEndpoint = '/api/health';
+  } else {
+    // Development: use localhost
+    const BACKEND_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001';
+    healthEndpoint = `${BACKEND_URL}/api/health`;
+  }
 
   try {
     const response = await fetch(healthEndpoint);
-    return response.ok;
-  } catch (error) {
+    const data = await response.json();
+
     if (process.env.NODE_ENV !== 'production') {
-      console.warn('[TRIAGE CLIENT] Backend health check failed:', error);
+      console.log('[TRIAGE CLIENT] Health check response:', data);
     }
-    return false;
+
+    return {
+      isHealthy: response.ok,
+      status: data,
+      error: !response.ok ? data.error : undefined
+    };
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    if (process.env.NODE_ENV !== 'production') {
+      console.warn('[TRIAGE CLIENT] Backend health check failed:', errorMessage);
+    }
+    return {
+      isHealthy: false,
+      status: null,
+      error: errorMessage
+    };
   }
 }

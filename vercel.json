@@ -1,0 +1,15 @@
+{
+  "buildCommand": "npm run build",
+  "devCommand": "npm run dev",
+  "outputDirectory": "./dist",
+  "env": {
+    "GEMINI_API_KEY": "@GEMINI_API_KEY"
+  },
+  "functions": {
+    "api/**/*.ts": {
+      "runtime": "nodejs-20.x",
+      "memory": 512,
+      "maxDuration": 30
+    }
+  }
+}

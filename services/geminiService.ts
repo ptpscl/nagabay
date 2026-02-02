@@ -1,88 +1,54 @@
 
-import { GoogleGenAI, Type } from "@google/genai";
-import { TriageResult, TriageLevel } from "../types";
+import { TriageResult } from "../types";
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-
-const SYSTEM_INSTRUCTION = `
-You are the "Naga City Smart Health Navigator." Your primary mission is to implement the "BHS-First" policy to ensure Barangay Health Stations are the first line of health care for Nagueños.
-
-STRICT TRIAGE & ROUTING RULES:
-
-1. LEVEL 1 (EMERGENCY) -> Naga City General Hospital (ncgh-1)
-   - Use ONLY for life-threatening conditions (unconscious, severe trauma, active heart attack).
-
-2. LEVEL 2 (TARGETED CARE) -> City Health Office I or II (cho-1, cho-2)
-   - Use ONLY for specialized needs: Animal bites (Rabies), TB-DOTS (if confirmed), or when BHS lacks specific labs.
-
-3. LEVEL 3 (ROUTINE / FIRST LINE) -> MANDATORY Barangay Health Station (BHS)
-   - For ALL general check-ups, cough/cold/fever, immunization, prenatal, dental check-up, and PhilHealth YAKAP profiling.
-   - YOU MUST match the patient's "barangay" to their specific BHS. 
-   - If you recommend a CHO for a routine cough/cold/fever, you are failing the "Institutional Win" of decongestion.
-
-MAPPING (Barangay to Facility ID):
-- Abella -> bhs-abella
-- Bagumbayan Norte -> bhs-bagumbayan-norte
-- Bagumbayan Sur -> bhs-bagumbayan-sur
-- Balatas -> bhs-balatas
-- Calauag -> bhs-calauag
-- Cararayan -> bhs-cararayan
-- Carolina -> bhs-carolina
-- Concepcion Grande -> bhs-concepcion-grande
-- Concepcion Pequeña -> bhs-concepcion-pequena
-- Del Rosario -> bhs-del-rosario
-- Pacol -> bhs-pacol
-- Sabang -> bhs-sabang
-- Tinago -> bhs-tinago
-- San Isidro -> bhs-san-isidro
-
-If the patient's barangay does not have a specific BHS in the list above, route them to the nearest CHO, but explicitly state in the "actionPlan" that they should check their local health center first for future routine needs.
-
-You must return a valid JSON object.
-`;
-
+/**
+ * Secure client-side service for triage analysis
+ * 
+ * This service communicates with the backend proxy at /api/triage
+ * The Gemini API key is never exposed to the client.
+ * 
+ * @param userInput - The patient intake data (typically stringified JSON)
+ * @returns Promise<TriageResult> - The AI triage analysis
+ * @throws Error if the API call fails or returns invalid data
+ */
 export async function getTriageAnalysis(userInput: string): Promise<TriageResult> {
-  const response = await ai.models.generateContent({
-    model: 'gemini-3-flash-preview',
-    contents: userInput,
-    config: {
-      systemInstruction: SYSTEM_INSTRUCTION,
-      responseMimeType: "application/json",
-      responseSchema: {
-        type: Type.OBJECT,
-        properties: {
-          triageLevel: {
-            type: Type.STRING,
-            enum: [TriageLevel.EMERGENCY, TriageLevel.URGENT, TriageLevel.ROUTINE],
-          },
-          urgencyScore: { type: Type.NUMBER },
-          explanation: { type: Type.STRING },
-          recommendedFacilityIds: {
-            type: Type.ARRAY,
-            items: { type: Type.STRING }
-          },
-          institutionalWin: { type: Type.STRING },
-          actionPlan: { type: Type.STRING },
-          bookingContact: {
-            type: Type.OBJECT,
-            properties: {
-              name: { type: Type.STRING },
-              phone: { type: Type.STRING },
-              scheduleNotes: { type: Type.STRING }
-            },
-            required: ["name", "phone", "scheduleNotes"]
-          }
-        },
-        required: ["triageLevel", "urgencyScore", "explanation", "recommendedFacilityIds", "institutionalWin", "actionPlan", "bookingContact"]
-      }
-    }
-  });
+  console.log("[v0] Calling triage API with user input");
 
   try {
-    const text = response.text.trim();
-    return JSON.parse(text);
-  } catch (error) {
-    console.error("Failed to parse Gemini response:", error);
-    throw new Error("Could not analyze symptoms. Please try again.");
+    const response = await fetch("/api/triage", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ userInput }),
+    });
+
+    // Handle HTTP errors
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      const errorMessage = 
+        errorData.error || 
+        `API request failed with status ${response.status}`;
+      
+      console.error("[v0] Triage API error:", errorMessage);
+      throw new Error(errorMessage);
+    }
+
+    // Parse and validate response
+    const result: TriageResult = await response.json();
+    
+    console.log("[v0] Triage analysis completed successfully");
+    return result;
+  } catch (error: any) {
+    console.error("[v0] Error in getTriageAnalysis:", error?.message || error);
+    
+    // Provide user-friendly error messages
+    if (error instanceof TypeError && error.message.includes("Failed to fetch")) {
+      throw new Error(
+        "Unable to connect to the server. Please check your internet connection and try again."
+      );
+    }
+    
+    throw error;
   }
 }

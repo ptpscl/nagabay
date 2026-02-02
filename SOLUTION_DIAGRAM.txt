@@ -1,0 +1,228 @@
+┌────────────────────────────────────────────────────────────────────────────┐
+│                           PRODUCTION ARCHITECTURE                          │
+│                        (After this fix is applied)                         │
+└────────────────────────────────────────────────────────────────────────────┘
+
+
+                              VERCEL PLATFORM
+    ┌─────────────────────────────────────────────────────────────────────┐
+    │                                                                     │
+    │  ┌──────────────────────────┐      ┌──────────────────────────┐   │
+    │  │                          │      │                          │   │
+    │  │  FRONTEND                │      │  BACKEND                 │   │
+    │  │  (React/Vite)            │      │  (Serverless Function)   │   │
+    │  │                          │      │                          │   │
+    │  │  ┌────────────────────┐  │      │  ┌────────────────────┐  │   │
+    │  │  │ App.tsx            │  │      │  │ /api/triage.js     │  │   │
+    │  │  │ Components         │  │      │  │                    │  │   │
+    │  │  │ triageClient.ts    │  │      │  │ - Validates input  │  │   │
+    │  │  │ (Calls /api/triage)│  │      │  │ - Uses GEMINI_API_ │  │   │
+    │  │  │                    │  │      │  │   KEY from env     │  │   │
+    │  │  │                    │  │      │  │ - Calls Gemini API │  │   │
+    │  │  │                    │  │      │  │ - Returns JSON     │  │   │
+    │  │  └────────────────────┘  │      │  └────────────────────┘  │   │
+    │  │           ↓              │      │           ↑              │   │
+    │  │   Deployed as static     │      │   Auto-deployed by       │   │
+    │  │   site on CDN            │      │   Vercel (no config!)    │   │
+    │  │                          │      │                          │   │
+    │  └──────────────────────────┘      └──────────────────────────┘   │
+    │           ↓                                    ↑                   │
+    │           │      POST /api/triage            │                   │
+    │           │  (same origin, no CORS!)        │                   │
+    │           └────────────────────────────────┘                    │
+    │                                                                     │
+    │  Environment Variables:                                           │
+    │  ├─ GEMINI_API_KEY (set in Settings)                             │
+    │  └─ NODE_ENV=production                                          │
+    │                                                                     │
+    └─────────────────────────────────────────────────────────────────────┘
+            ↓                                              ↑
+            │                                              │
+            │  HTTPS://NAGABAY.VERCEL.APP                │
+            │                                              │
+    ┌───────┴────────────────────────────────────────────┴──────────┐
+    │                                                                 │
+    │  ┌─────────────────┐    ┌──────────────────┐                 │
+    │  │  USER BROWSER   │    │  GOOGLE GEMINI   │                 │
+    │  │                 │    │  API             │                 │
+    │  │  Patient Form   │ ←→ │                  │                 │
+    │  │  Intake Data    │    │  Triage Analysis │                 │
+    │  └─────────────────┘    └──────────────────┘                 │
+    │                                                                 │
+    └─────────────────────────────────────────────────────────────────┘
+
+
+┌────────────────────────────────────────────────────────────────────────────┐
+│                            REQUEST FLOW                                    │
+└────────────────────────────────────────────────────────────────────────────┘
+
+  Step 1: User fills form
+  ─────────────────────────────────────────────────────
+    Patient Intake Data → React App
+
+
+  Step 2: Frontend sends request
+  ─────────────────────────────────────────────────────
+    React calls: POST /api/triage
+                     ↓
+    (NO CORS issues - same domain!)
+
+
+  Step 3: Vercel routes request
+  ─────────────────────────────────────────────────────
+    Vercel detects: /api/triage
+                     ↓
+    Routes to serverless function: /api/triage.js
+
+
+  Step 4: Serverless function processes
+  ─────────────────────────────────────────────────────
+    /api/triage.js:
+      ├─ Gets GEMINI_API_KEY from environment
+      ├─ Validates patient data
+      ├─ Calls Google Gemini API
+      └─ Formats response as JSON
+
+
+  Step 5: Backend returns response
+  ─────────────────────────────────────────────────────
+    /api/triage.js sends JSON back to React
+                     ↓
+    React receives: 
+      {
+        "success": true,
+        "data": {
+          "triageLevel": "ROUTINE",
+          "recommendedFacility": "bhs-abella",
+          ...
+        }
+      }
+
+
+  Step 6: Frontend displays results
+  ─────────────────────────────────────────────────────
+    React renders:
+      ├─ Triage Level
+      ├─ Facility Recommendation
+      ├─ Action Plan
+      └─ Booking Contact Info
+
+
+┌────────────────────────────────────────────────────────────────────────────┐
+│                          SECURITY CHECKLIST                               │
+└────────────────────────────────────────────────────────────────────────────┘
+
+  ✓ GEMINI_API_KEY
+    └─ Server-side only (in /api/triage.js)
+    └─ Never sent to frontend
+    └─ Stored in Vercel environment variables
+    └─ NOT in .env.local (protected by .gitignore)
+    └─ NOT in code (uses process.env)
+
+  ✓ FRONTEND SAFETY
+    └─ No direct Gemini imports
+    └─ No API key in build
+    └─ Safe to deploy publicly
+
+  ✓ COMMUNICATION
+    └─ Uses HTTPS (automatic on Vercel)
+    └─ Same origin (/api) - no CORS issues
+    └─ POST only (no sensitive data in URL)
+
+  ✓ ERROR HANDLING
+    └─ API key validation on startup
+    └─ Proper error categorization
+    └─ User-friendly error messages
+
+
+┌────────────────────────────────────────────────────────────────────────────┐
+│                          LOCAL DEVELOPMENT                                │
+└────────────────────────────────────────────────────────────────────────────┘
+
+  When testing locally (not on Vercel):
+
+  Terminal 1:
+  ──────────────────────────────────────────────────────
+  $ PORT=3001 GEMINI_API_KEY=your-key node server/index.js
+  
+  → Starts Express server on http://localhost:3001
+  → Listens to POST /api/triage/analyze
+
+
+  Terminal 2:
+  ──────────────────────────────────────────────────────
+  $ npm run dev
+  
+  → Starts Vite frontend on http://localhost:3000
+  → Connects to Express backend at http://localhost:3001
+
+
+  Client-side logic:
+  ──────────────────────────────────────────────────────
+  if (production):
+    Call → /api/triage (Vercel serverless)
+  else:
+    Call → http://localhost:3001/api/triage/analyze (Express)
+
+
+┌────────────────────────────────────────────────────────────────────────────┐
+│                      DEPLOYMENT CHECKLIST                                 │
+└────────────────────────────────────────────────────────────────────────────┘
+
+  Before Pushing:
+  ├─ [ ] /api/triage.js exists
+  ├─ [ ] /services/triageClient.ts updated
+  ├─ [ ] .gitignore includes .env.local
+  └─ [ ] No API key in code
+
+  GitHub:
+  ├─ [ ] git add .
+  ├─ [ ] git commit -m "message"
+  └─ [ ] git push origin main
+
+  Vercel:
+  ├─ [ ] Deployment starts automatically
+  ├─ [ ] Wait for "✓ Ready" status
+  ├─ [ ] Check for build errors
+  └─ [ ] Verify /api/triage is listed in Functions
+
+  Testing:
+  ├─ [ ] Visit https://nagabay.vercel.app
+  ├─ [ ] Fill out form
+  ├─ [ ] Click Analyze
+  └─ [ ] See results ✓
+
+
+┌────────────────────────────────────────────────────────────────────────────┐
+│                              KEY BENEFITS                                  │
+└────────────────────────────────────────────────────────────────────────────┘
+
+  Serverless Functions are perfect for this because:
+
+  ✓ ZERO MAINTENANCE
+    └─ No server to manage
+    └─ Vercel handles everything
+    └─ Auto-scaling built-in
+
+  ✓ SECURE BY DEFAULT
+    └─ Environment variables server-side only
+    └─ No CORS needed (same domain)
+    └─ Cold starts don't matter for triage (non-real-time)
+
+  ✓ COST EFFECTIVE
+    └─ Pay only for execution time
+    └─ Generous free tier on Vercel
+    └─ Auto-scales to zero when not used
+
+  ✓ FAST DEPLOYMENT
+    └─ git push → auto-deploys
+    └─ No build configuration needed
+    └─ Changes live in 1-2 minutes
+
+  ✓ PRODUCTION READY
+    └─ Built for production scale
+    └─ Handles spikes automatically
+    └─ Geographic distribution via CDN
+
+
+This is the standard way to deploy backends on Vercel!

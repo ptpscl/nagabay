@@ -38,8 +38,18 @@ const ERROR_MESSAGES: Record<string, string> = {
  * @returns Promise with triage result or error
  */
 export async function analyzeTriageViaAPI(intakeData: any): Promise<TriageResponse> {
-  const BACKEND_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001';
-  const endpoint = `${BACKEND_URL}/api/triage/analyze`;
+  // In production on Vercel: use /api/triage (serverless function)
+  // In development: use http://localhost:3001/api/triage/analyze (Express server)
+  let endpoint: string;
+  
+  if (typeof window !== 'undefined' && process.env.NODE_ENV === 'production') {
+    // Production: use relative /api path
+    endpoint = '/api/triage';
+  } else {
+    // Development: use localhost
+    const BACKEND_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001';
+    endpoint = `${BACKEND_URL}/api/triage/analyze`;
+  }
 
   try {
     if (process.env.NODE_ENV !== 'production') {

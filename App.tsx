@@ -111,7 +111,9 @@ const App: React.FC = () => {
         // Show user-friendly error message based on error type
         const errorMessage = getUserFriendlyErrorMessage(response.errorType);
         alert(`Unable to analyze symptoms: ${errorMessage}`);
-        console.error('[APP] Triage analysis failed:', response.errorType, response.error);
+        if (process.env.NODE_ENV !== 'production') {
+          console.error('[APP] Triage analysis failed:', response.errorType, response.error);
+        }
         return;
       }
 
@@ -124,7 +126,9 @@ const App: React.FC = () => {
     } catch (error: any) {
       const errorMessage = error.message || 'An unexpected error occurred. Please try again.';
       alert(`Error: ${errorMessage}`);
-      console.error('[APP] Intake submission error:', error);
+      if (process.env.NODE_ENV !== 'production') {
+        console.error('[APP] Intake submission error:', error);
+      }
     } finally {
       setIsTyping(false);
     }

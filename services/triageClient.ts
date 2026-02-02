@@ -42,7 +42,9 @@ export async function analyzeTriageViaAPI(intakeData: any): Promise<TriageRespon
   const endpoint = `${BACKEND_URL}/api/triage/analyze`;
 
   try {
-    console.log('[TRIAGE CLIENT] Sending request to:', endpoint);
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('[TRIAGE CLIENT] Sending request to:', endpoint);
+    }
 
     const response = await fetch(endpoint, {
       method: 'POST',
@@ -55,17 +57,21 @@ export async function analyzeTriageViaAPI(intakeData: any): Promise<TriageRespon
 
     const data: TriageResponse = await response.json();
 
-    // Log response (sanitized)
-    if (data.success) {
-      console.log('[TRIAGE CLIENT] Triage analysis completed successfully');
-    } else {
-      console.log('[TRIAGE CLIENT] API returned error:', data.errorType);
+    // Log response (sanitized - development only)
+    if (process.env.NODE_ENV !== 'production') {
+      if (data.success) {
+        console.log('[TRIAGE CLIENT] Triage analysis completed successfully');
+      } else {
+        console.log('[TRIAGE CLIENT] API returned error:', data.errorType);
+      }
     }
 
     // Check if response indicates success
     if (!response.ok) {
       // Server returned an error response
-      console.error('[TRIAGE CLIENT] HTTP Error:', response.status, data.errorType);
+      if (process.env.NODE_ENV !== 'production') {
+        console.error('[TRIAGE CLIENT] HTTP Error:', response.status, data.errorType);
+      }
       
       return {
         success: false,
@@ -81,7 +87,9 @@ export async function analyzeTriageViaAPI(intakeData: any): Promise<TriageRespon
   } catch (error) {
     // Network error or parsing error
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    console.error('[TRIAGE CLIENT] Network error:', errorMessage);
+    if (process.env.NODE_ENV !== 'production') {
+      console.error('[TRIAGE CLIENT] Network error:', errorMessage);
+    }
 
     return {
       success: false,
@@ -117,7 +125,9 @@ export async function validateBackendConnection(): Promise<boolean> {
     const response = await fetch(healthEndpoint);
     return response.ok;
   } catch (error) {
-    console.warn('[TRIAGE CLIENT] Backend health check failed:', error);
+    if (process.env.NODE_ENV !== 'production') {
+      console.warn('[TRIAGE CLIENT] Backend health check failed:', error);
+    }
     return false;
   }
 }

@@ -10,7 +10,7 @@ import TelemedicineView from './components/TelemedicineView';
 import ProviderHub from './components/ProviderHub';
 import LGUPortal from './components/LGUPortal';
 import { NAGA_FACILITIES } from './constants';
-import { getTriageAnalysis } from './services/geminiService';
+import { analyzeTriageViaAPI, getUserFriendlyErrorMessage } from './services/triageClient';
 import { ChatMessage, TriageLevel, TriageResult, Facility, IntakeData, Booking } from './types';
 
 type AppView = 'home' | 'intake' | 'dashboard' | 'telemedicine' | 'provider-hub' | 'split-view' | 'lgu-portal';
@@ -104,14 +104,31 @@ const App: React.FC = () => {
     setIsTyping(true);
     setLastIntake(data);
     try {
-      const result = await getTriageAnalysis(JSON.stringify(data));
-      setCurrentTriage(result);
+      // Call the backend API instead of directly calling Gemini
+      const response = await analyzeTriageViaAPI(data);
+      
+      if (!response.success) {
+        // Show user-friendly error message based on error type
+        const errorMessage = getUserFriendlyErrorMessage(response.errorType);
+        alert(`Unable to analyze symptoms: ${errorMessage}`);
+        if (process.env.NODE_ENV !== 'production') {
+          console.error('[APP] Triage analysis failed:', response.errorType, response.error);
+        }
+        return;
+      }
+
+      // Process successful response
+      setCurrentTriage(response.data);
       setShowRecommendations(true);
       if (view === 'split-view') setPatientSubView('dashboard');
       else setView('dashboard');
       setActiveTab('account');
     } catch (error: any) {
-      alert(`Error: ${error.message}`);
+      const errorMessage = error.message || 'An unexpected error occurred. Please try again.';
+      alert(`Error: ${errorMessage}`);
+      if (process.env.NODE_ENV !== 'production') {
+        console.error('[APP] Intake submission error:', error);
+      }
     } finally {
       setIsTyping(false);
     }

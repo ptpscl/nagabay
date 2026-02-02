@@ -1,0 +1,85 @@
+# Environment Variables
+# ====================
+# CRITICAL: Never commit files with actual API keys or secrets!
+# These files contain sensitive information and MUST be in .gitignore
+
+# Local environment file (development only)
+.env.local
+.env.*.local
+.env
+
+# Vercel environment variables (for deployment)
+.env.local.production
+.env.production
+
+# ============================================================================
+
+# Dependencies
+node_modules
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+bun.lockb
+
+# Build Output
+dist
+build
+out
+.next
+
+# IDE and Editor
+.vscode
+.idea
+.DS_Store
+*.swp
+*.swo
+*~
+.sublime-project
+.sublime-workspace
+
+# OS
+Thumbs.db
+.env.production.local
+
+# Testing
+coverage
+.nyc_output
+
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+.pnpm-debug.log*
+
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# Temporary files
+tmp
+temp
+*.tmp
+
+# Cache directories
+.cache
+.parcel-cache
+
+# Optional npm cache directory
+.npm
+
+# Optional eslint cache
+.eslintcache
+
+# Output of 'npm pack'
+*.tgz
+
+# dotenv environment variables file
+.env*.local
+
+# Mac files
+.DS_Store

@@ -11,8 +11,9 @@ export default defineConfig(({ mode }) => {
       },
       plugins: [react()],
       define: {
-        'process.env.API_KEY': JSON.stringify(env.GEMINI_API_KEY),
-        'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY)
+        // Backend API URL is configured via REACT_APP_API_URL environment variable
+        // IMPORTANT: Never expose GEMINI_API_KEY to the frontend!
+        'process.env.REACT_APP_API_URL': JSON.stringify(env.REACT_APP_API_URL || 'http://localhost:3001')
       },
       resolve: {
         alias: {

@@ -39,22 +39,11 @@ const ERROR_MESSAGES: Record<string, string> = {
  */
 export async function analyzeTriageViaAPI(intakeData: any): Promise<TriageResponse> {
   // In production on Vercel: use /api/triage (serverless function)
-  // In development: use http://localhost:3001/api/triage/analyze (Express server)
-  let endpoint: string;
-  
-  if (typeof window !== 'undefined' && process.env.NODE_ENV === 'production') {
-    // Production: use relative /api path
-    endpoint = '/api/triage';
-  } else {
-    // Development: use localhost
-    const BACKEND_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001';
-    endpoint = `${BACKEND_URL}/api/triage/analyze`;
-  }
+  // In development: use /api/triage (both Vite and Express routes)
+  const endpoint = '/api/triage';
 
   try {
-    if (process.env.NODE_ENV !== 'production') {
-      console.log('[TRIAGE CLIENT] Sending request to:', endpoint);
-    }
+    console.log('[TRIAGE CLIENT] Sending request to:', endpoint);
 
     const response = await fetch(endpoint, {
       method: 'POST',
@@ -132,24 +121,14 @@ export async function validateBackendConnection(): Promise<{
   status: any;
   error?: string;
 }> {
-  let healthEndpoint: string;
-
-  if (typeof window !== 'undefined' && process.env.NODE_ENV === 'production') {
-    // Production: use relative /api path
-    healthEndpoint = '/api/health';
-  } else {
-    // Development: use localhost
-    const BACKEND_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001';
-    healthEndpoint = `${BACKEND_URL}/api/health`;
-  }
+  const healthEndpoint = '/api/health';
 
   try {
+    console.log('[TRIAGE CLIENT] Health check to:', healthEndpoint);
     const response = await fetch(healthEndpoint);
     const data = await response.json();
 
-    if (process.env.NODE_ENV !== 'production') {
-      console.log('[TRIAGE CLIENT] Health check response:', data);
-    }
+    console.log('[TRIAGE CLIENT] Health check response:', data);
 
     return {
       isHealthy: response.ok,
@@ -158,9 +137,7 @@ export async function validateBackendConnection(): Promise<{
     };
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    if (process.env.NODE_ENV !== 'production') {
-      console.warn('[TRIAGE CLIENT] Backend health check failed:', errorMessage);
-    }
+    console.warn('[TRIAGE CLIENT] Backend health check failed:', errorMessage);
     return {
       isHealthy: false,
       status: null,

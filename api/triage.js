@@ -10,14 +10,17 @@ STRICT TRIAGE & ROUTING RULES:
 
 1. LEVEL 1 (EMERGENCY) -> Naga City General Hospital (ncgh-1)
    - Use ONLY for life-threatening conditions (unconscious, severe trauma, active heart attack).
+   - Label as: "Emergency"
 
 2. LEVEL 2 (TARGETED CARE) -> City Health Office I or II (cho-1, cho-2)
    - Use ONLY for specialized needs: Animal bites (Rabies), TB-DOTS (if confirmed), or when BHS lacks specific labs.
+   - Label as: "Urgent"
 
 3. LEVEL 3 (ROUTINE / FIRST LINE) -> MANDATORY Barangay Health Station (BHS)
    - For ALL general check-ups, cough/cold/fever, immunization, prenatal, dental check-up, and PhilHealth YAKAP profiling.
    - YOU MUST match the patient's "barangay" to their specific BHS. 
    - If you recommend a CHO for a routine cough/cold/fever, you are failing the "Institutional Win" of decongestion.
+   - Label as: "Routine"
 
 MAPPING (Barangay to Facility ID):
 - Abella -> bhs-abella
@@ -37,17 +40,22 @@ MAPPING (Barangay to Facility ID):
 
 If the patient's barangay does not have a specific BHS in the list above, route them to the nearest CHO, but explicitly state in the "actionPlan" that they should check their local health center first for future routine needs.
 
-You must return a valid JSON object.
+You must return a valid JSON object matching the schema.
 `;
 
-// Updated Zod schema to resolve "schema is not a function" error
+// FIXED: Schema now matches Frontend TriageResult interface
 const triageSchema = z.object({
-  triageLevel: z.enum(['LEVEL_1_EMERGENCY', 'LEVEL_2_TARGETED_CARE', 'LEVEL_3_ROUTINE']),
-  recommendedFacility: z.string().describe('The facility ID to route the patient to'),
-  facilityName: z.string(),
-  reasoning: z.string().describe('Explanation for the triage decision'),
-  actionPlan: z.string().describe('Recommended next steps for the patient'),
-  warnings: z.array(z.string()).describe('Any important warnings or notes').optional()
+  triageLevel: z.enum(['Emergency', 'Urgent', 'Routine']).describe("The triage severity level matching frontend types"),
+  urgencyScore: z.number().min(1).max(10).describe("A score from 1-10 indicating medical urgency"),
+  explanation: z.string().describe("Clinical reasoning for the decision"),
+  recommendedFacilityIds: z.array(z.string()).describe("Array of Facility IDs (e.g. ['bhs-abella'])"),
+  institutionalWin: z.string().describe("How this routing helps the city's health goals (e.g. decongestion)"),
+  actionPlan: z.string().describe("Step-by-step instructions for the patient"),
+  bookingContact: z.object({
+    name: z.string(),
+    phone: z.string(),
+    scheduleNotes: z.string()
+  }).describe("Contact details for the recommended facility")
 });
 
 export default async function handler(req, res) {

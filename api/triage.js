@@ -113,7 +113,7 @@ export default async function handler(req, res) {
 
     // Use Vercel AI Gateway with Google models
     // The API key is automatically provided by Vercel AI Gateway
-    const model = google('gemini-1.5-flash');
+    const model = google('gemini-2.0-flash');
 
     // Call the AI model
     const result = await generateObject({

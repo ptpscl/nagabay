@@ -1,5 +1,6 @@
 import { generateObject } from 'ai';
 import { google } from '@ai-sdk/google';
+import { z } from 'zod';
 
 // System instruction for the triage AI
 const SYSTEM_INSTRUCTION = `
@@ -39,37 +40,15 @@ If the patient's barangay does not have a specific BHS in the list above, route 
 You must return a valid JSON object.
 `;
 
-// Define the schema for the triage response
-const triageSchema = {
-  type: 'object',
-  properties: {
-    triageLevel: {
-      type: 'string',
-      enum: ['LEVEL_1_EMERGENCY', 'LEVEL_2_TARGETED_CARE', 'LEVEL_3_ROUTINE']
-    },
-    recommendedFacility: {
-      type: 'string',
-      description: 'The facility ID to route the patient to'
-    },
-    facilityName: {
-      type: 'string'
-    },
-    reasoning: {
-      type: 'string',
-      description: 'Explanation for the triage decision'
-    },
-    actionPlan: {
-      type: 'string',
-      description: 'Recommended next steps for the patient'
-    },
-    warnings: {
-      type: 'array',
-      items: { type: 'string' },
-      description: 'Any important warnings or notes'
-    }
-  },
-  required: ['triageLevel', 'recommendedFacility', 'facilityName', 'reasoning', 'actionPlan']
-};
+// Updated Zod schema to resolve "schema is not a function" error
+const triageSchema = z.object({
+  triageLevel: z.enum(['LEVEL_1_EMERGENCY', 'LEVEL_2_TARGETED_CARE', 'LEVEL_3_ROUTINE']),
+  recommendedFacility: z.string().describe('The facility ID to route the patient to'),
+  facilityName: z.string(),
+  reasoning: z.string().describe('Explanation for the triage decision'),
+  actionPlan: z.string().describe('Recommended next steps for the patient'),
+  warnings: z.array(z.string()).describe('Any important warnings or notes').optional()
+});
 
 export default async function handler(req, res) {
   // CORS headers
@@ -111,11 +90,9 @@ export default async function handler(req, res) {
       });
     }
 
-    // Use Vercel AI Gateway with Google models
-    // The API key is automatically provided by Vercel AI Gateway
     const model = google('gemini-2.0-flash');
 
-    // Call the AI model
+    // Call the AI model with the Zod schema
     const result = await generateObject({
       model: model,
       system: SYSTEM_INSTRUCTION,
@@ -131,7 +108,6 @@ export default async function handler(req, res) {
   } catch (error) {
     console.error('[TRIAGE API] Error:', error.message);
 
-    // Determine error type
     let errorType = 'MODEL_ERROR';
     let message = 'AI service error. Try again.';
     let statusCode = 503;

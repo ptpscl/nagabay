@@ -15,7 +15,7 @@
     "jspdf": "2.5.1",
     "xlsx": "0.18.5",
     "ai": "^6.0.0",
-    "@ai-sdk/google": "^1.0.0"
+    "@ai-sdk/google": "^1.1.0"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",

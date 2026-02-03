@@ -16,6 +16,7 @@
     "xlsx": "0.18.5",
     "ai": "^6.0.67",
     "@ai-sdk/google": "^3.0.18"
+    "zod": "^3.23.8"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",

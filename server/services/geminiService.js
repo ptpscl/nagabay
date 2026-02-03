@@ -1,4 +1,4 @@
-import { GoogleGenAI, Type } from '@google/genai';
+import { google } from '@ai-sdk/google';
 
 /**
  * Lazy initialization of Gemini client
@@ -52,9 +52,8 @@ function initializeClient() {
       throw initializationError;
     }
 
-    geminiClient = new GoogleGenAI({
-      apiKey: process.env.GEMINI_API_KEY
-    });
+    // AI SDK handles API key automatically from GEMINI_API_KEY env var
+    geminiClient = { initialized: true };
 
     console.log('[GEMINI] Client initialized successfully');
     return { client: geminiClient, error: null };
@@ -224,67 +223,30 @@ export async function getTriageAnalysis(userInput) {
   try {
     console.log('[GEMINI] Sending triage request...');
     
-    const response = await client.models.generateContent({
-      model: 'gemini-2.0-flash',
-      contents: userInput,
-      config: {
-        systemInstruction: SYSTEM_INSTRUCTION,
-        responseMimeType: 'application/json',
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            triageLevel: {
-              type: Type.STRING,
-              enum: ['EMERGENCY', 'URGENT', 'ROUTINE'],
-              description: 'Severity level of the patient\'s condition'
-            },
-            urgencyScore: {
-              type: Type.NUMBER,
-              description: 'Numeric score from 1-10 indicating urgency'
-            },
-            explanation: {
-              type: Type.STRING,
-              description: 'Clinical reasoning for triage decision'
-            },
-            recommendedFacilityIds: {
-              type: Type.ARRAY,
-              items: { type: Type.STRING },
-              description: 'List of recommended facility IDs for patient referral'
-            },
-            institutionalWin: {
-              type: Type.STRING,
-              description: 'Description of how this routing achieves institutional goals'
-            },
-            actionPlan: {
-              type: Type.STRING,
-              description: 'Step-by-step action plan for the patient'
-            },
-            bookingContact: {
-              type: Type.OBJECT,
-              properties: {
-                name: { type: Type.STRING },
-                phone: { type: Type.STRING },
-                scheduleNotes: { type: Type.STRING }
-              },
-              required: ['name', 'phone', 'scheduleNotes']
-            }
-          },
-          required: [
-            'triageLevel',
-            'urgencyScore',
-            'explanation',
-            'recommendedFacilityIds',
-            'institutionalWin',
-            'actionPlan',
-            'bookingContact'
-          ]
-        }
-      }
+    // Use AI SDK's generateObject for structured output
+    const { generateObject } = await import('ai');
+    const { z } = await import('zod');
+    
+    const TriageSchema = z.object({
+      triageLevel: z.enum(['EMERGENCY', 'URGENT', 'ROUTINE']).describe('Severity level of the patient\'s condition'),
+      urgencyScore: z.number().describe('Numeric score from 1-10 indicating urgency'),
+      explanation: z.string().describe('Clinical reasoning for triage decision'),
+      recommendedFacilityIds: z.array(z.string()).describe('List of recommended facility IDs for patient referral'),
+      institutionalWin: z.string().describe('Description of how this routing achieves institutional goals'),
+      actionPlan: z.string().describe('Step-by-step action plan for the patient'),
+      bookingContact: z.object({
+        name: z.string(),
+        phone: z.string(),
+        scheduleNotes: z.string()
+      }).describe('Booking contact information')
     });
 
-    // Parse the response
-    const text = response.text.trim();
-    const triageResult = JSON.parse(text);
+    const { object: triageResult } = await generateObject({
+      model: google('gemini-2.0-flash'),
+      schema: TriageSchema,
+      system: SYSTEM_INSTRUCTION,
+      prompt: userInput
+    });
 
     console.log('[GEMINI] Response parsed successfully');
     return triageResult;
@@ -292,15 +254,6 @@ export async function getTriageAnalysis(userInput) {
   } catch (error) {
     console.error('[GEMINI] API Error:', error.message);
     
-    // Check if it's a parsing error
-    if (error instanceof SyntaxError) {
-      throw new GeminiError(
-        'Failed to parse AI response. The response format was invalid.',
-        'PARSE_ERROR',
-        500
-      );
-    }
-
     // Categorize the error
     const errorCategory = categorizeError(error);
     throw new GeminiError(

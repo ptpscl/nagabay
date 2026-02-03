@@ -38,17 +38,19 @@ const ERROR_MESSAGES: Record<string, string> = {
  * @returns Promise with triage result or error
  */
 export async function analyzeTriageViaAPI(intakeData: any): Promise<TriageResponse> {
-  // In production on Vercel: use /api/triage (serverless function)
-  // In development: use http://localhost:3001/api/triage/analyze (Express server)
+  // Both production (Vercel) and development use the same /api/triage endpoint
+  // In development with Express server: configure REACT_APP_API_URL to point to http://localhost:3001
+  // In production on Vercel: use /api/triage (Vercel serverless function)
   let endpoint: string;
   
-  if (typeof window !== 'undefined' && process.env.NODE_ENV === 'production') {
-    // Production: use relative /api path
+  if (process.env.NODE_ENV === 'production') {
+    // Production on Vercel: use relative /api path (Vercel serverless function)
     endpoint = '/api/triage';
   } else {
-    // Development: use localhost
+    // Development: check if backend URL is configured, otherwise use localhost
     const BACKEND_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001';
-    endpoint = `${BACKEND_URL}/api/triage/analyze`;
+    // Use the same /api/triage endpoint
+    endpoint = `${BACKEND_URL}/api/triage`;
   }
 
   try {
@@ -134,11 +136,11 @@ export async function validateBackendConnection(): Promise<{
 }> {
   let healthEndpoint: string;
 
-  if (typeof window !== 'undefined' && process.env.NODE_ENV === 'production') {
-    // Production: use relative /api path
+  if (process.env.NODE_ENV === 'production') {
+    // Production on Vercel: use relative /api path
     healthEndpoint = '/api/health';
   } else {
-    // Development: use localhost
+    // Development: use configured backend URL or localhost
     const BACKEND_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001';
     healthEndpoint = `${BACKEND_URL}/api/health`;
   }

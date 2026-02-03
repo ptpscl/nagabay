@@ -1,4 +1,3 @@
-
 import { Facility } from './types';
 
 export const NAGA_FACILITIES: Facility[] = [

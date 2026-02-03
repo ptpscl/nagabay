@@ -1,4 +1,3 @@
-
 import React, { useMemo } from 'react';
 import * as XLSX from 'xlsx';
 import { Booking } from '../types';

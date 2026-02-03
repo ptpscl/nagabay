@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Booking, TriageLevel, Facility, PrescribedDrug } from '../types';
 import { NAGA_FACILITIES } from '../constants';

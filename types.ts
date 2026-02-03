@@ -1,4 +1,3 @@
-
 export enum TriageLevel {
   EMERGENCY = 'Emergency',
   URGENT = 'Urgent',

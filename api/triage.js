@@ -1,5 +1,4 @@
-import { generateObject } from 'ai';
-import { google } from '@ai-sdk/google';
+import { GoogleGenerativeAI } from "@google/generative-ai";
 
 // System instruction for the triage AI
 const SYSTEM_INSTRUCTION = `
@@ -39,38 +38,6 @@ If the patient's barangay does not have a specific BHS in the list above, route 
 You must return a valid JSON object.
 `;
 
-// Define the schema for the triage response
-const triageSchema = {
-  type: 'object',
-  properties: {
-    triageLevel: {
-      type: 'string',
-      enum: ['LEVEL_1_EMERGENCY', 'LEVEL_2_TARGETED_CARE', 'LEVEL_3_ROUTINE']
-    },
-    recommendedFacility: {
-      type: 'string',
-      description: 'The facility ID to route the patient to'
-    },
-    facilityName: {
-      type: 'string'
-    },
-    reasoning: {
-      type: 'string',
-      description: 'Explanation for the triage decision'
-    },
-    actionPlan: {
-      type: 'string',
-      description: 'Recommended next steps for the patient'
-    },
-    warnings: {
-      type: 'array',
-      items: { type: 'string' },
-      description: 'Any important warnings or notes'
-    }
-  },
-  required: ['triageLevel', 'recommendedFacility', 'facilityName', 'reasoning', 'actionPlan']
-};
-
 export default async function handler(req, res) {
   // CORS headers
   res.setHeader('Access-Control-Allow-Credentials', 'true');
@@ -97,6 +64,17 @@ export default async function handler(req, res) {
   }
 
   try {
+    // Check for API key
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      console.error('[TRIAGE API] Missing GEMINI_API_KEY environment variable');
+      return res.status(503).json({
+        success: false,
+        error: 'AI service not configured. Missing API key.',
+        errorType: 'MISSING_API_KEY'
+      });
+    }
+
     // Parse request body
     let bodyData = req.body;
     if (typeof bodyData === 'string') {
@@ -111,22 +89,44 @@ export default async function handler(req, res) {
       });
     }
 
-    // Use Vercel AI Gateway with Google models
-    // The API key is automatically provided by Vercel AI Gateway
-    const model = google('gemini-2.0-flash');
+    // Initialize Google AI with your API key
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+
+    // Build the prompt with system instruction
+    const prompt = `${SYSTEM_INSTRUCTION}\n\nPatient Data:\n${JSON.stringify(bodyData)}\n\nRespond with ONLY valid JSON (no markdown, no code blocks, just raw JSON) with these fields: triageLevel, recommendedFacility, facilityName, reasoning, actionPlan, warnings (optional array)`;
 
     // Call the AI model
-    const result = await generateObject({
-      model: model,
-      system: SYSTEM_INSTRUCTION,
-      prompt: JSON.stringify(bodyData),
-      schema: triageSchema
-    });
+    const result = await model.generateContent(prompt);
+    const responseText = result.response.text();
+
+    // Parse the JSON response
+    let triageData;
+    try {
+      triageData = JSON.parse(responseText);
+    } catch (parseError) {
+      console.error('[TRIAGE API] JSON Parse Error:', parseError.message);
+      console.error('[TRIAGE API] Response was:', responseText);
+      return res.status(503).json({
+        success: false,
+        error: 'AI returned invalid response format',
+        errorType: 'INVALID_RESPONSE'
+      });
+    }
+
+    // Validate required fields
+    if (!triageData.triageLevel || !triageData.recommendedFacility || !triageData.facilityName) {
+      return res.status(503).json({
+        success: false,
+        error: 'AI response missing required fields',
+        errorType: 'INVALID_RESPONSE'
+      });
+    }
 
     // Return success
     return res.status(200).json({
       success: true,
-      data: result.object
+      data: triageData
     });
   } catch (error) {
     console.error('[TRIAGE API] Error:', error.message);
@@ -136,11 +136,11 @@ export default async function handler(req, res) {
     let message = 'AI service error. Try again.';
     let statusCode = 503;
 
-    if (error.message.includes('API key') || error.message.includes('authentication')) {
+    if (error.message.includes('API key') || error.message.includes('authentication') || error.message.includes('401')) {
       errorType = 'MISSING_API_KEY';
-      message = 'AI service not configured. Contact support.';
+      message = 'API key invalid or missing. Check GEMINI_API_KEY in Vercel.';
       statusCode = 503;
-    } else if (error.message.includes('quota') || error.message.includes('rate')) {
+    } else if (error.message.includes('quota') || error.message.includes('rate') || error.message.includes('429')) {
       errorType = 'QUOTA_EXCEEDED';
       message = 'Service overloaded. Try again in moments.';
       statusCode = 429;
